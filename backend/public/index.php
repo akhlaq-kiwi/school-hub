@@ -459,6 +459,180 @@ function seedDb($pdo) {
         $logStmt = $pdo->prepare("INSERT INTO audit_logs (operator, action, timestamp, details) VALUES ('System', 'Platform Init', NOW(), 'Seeded Super Admin Account Bilal@yopmail.com')");
         $logStmt->execute();
     }
+
+    // Seed default School
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM schools WHERE id = 1");
+    $stmt->execute();
+    if ($stmt->fetchColumn() == 0) {
+        $stmt = $pdo->prepare("INSERT INTO schools (id, name, code, contact_person, contact_number, email, status, subscription_start, subscription_end, setup_completed) VALUES (1, 'St. Xavier''s International School', 'SCH-981763', 'Fr. Thomas Matthews', '+1 (555) 019-8833', 'xavier.admin@xavier.edu', 'Active', '2026-04-01', '2027-03-31', 1)");
+        $stmt->execute();
+    }
+
+    // Seed default School Admin User
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE email = :email");
+    $stmt->execute(['email' => 'Admin@yopmail.com']);
+    if ($stmt->fetchColumn() == 0) {
+        $hashed = password_hash('Admin@123', PASSWORD_BCRYPT);
+        $stmt = $pdo->prepare("INSERT INTO users (school_id, email, password, role, is_active) VALUES (1, :email, :password, 'School Admin', 1)");
+        $stmt->execute([
+            'email' => 'Admin@yopmail.com',
+            'password' => $hashed
+        ]);
+    }
+
+    // Seed default Academic Years
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM academic_years WHERE school_id = 1");
+    $stmt->execute();
+    if ($stmt->fetchColumn() == 0) {
+        $defaultJson = json_encode([
+            "April" => 150, "May" => 150, "June" => 150, "July" => 150, "August" => 150, 
+            "September" => 150, "October" => 150, "November" => 150, "December" => 150, 
+            "January" => 150, "February" => 150, "March" => 150
+        ]);
+        $stmt = $pdo->prepare("INSERT INTO academic_years (school_id, year_range, start_date, end_date, description, status, is_active, fee_structure) VALUES 
+        (1, '2025-2026', '2025-04-01', '2026-03-31', 'Previous Session', 'Archived', 0, :fs),
+        (1, '2026-2027', '2026-04-01', '2027-03-31', 'Current Session', 'Active', 1, :fs)");
+        $stmt->execute(['fs' => $defaultJson]);
+    }
+
+    // Seed default Classrooms
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM classrooms WHERE school_id = 1");
+    $stmt->execute();
+    if ($stmt->fetchColumn() == 0) {
+        $classes = [
+            ['Class 1', 'Room 101'],
+            ['Class 2', 'Room 102'],
+            ['Class 3', 'Room 103'],
+            ['Class 4', 'Room 104'],
+            ['Class 5', 'Room 105'],
+            ['Class 6', 'Room 201'],
+            ['Class 7', 'Room 202'],
+            ['Class 8', 'Room 203'],
+            ['Class 9', 'Room 204'],
+            ['Class 10', 'Room 205'],
+            ['Class 11', 'Room 301'],
+            ['Class 12', 'Room 302']
+        ];
+        $stmt = $pdo->prepare("INSERT INTO classrooms (school_id, name, room) VALUES (1, :name, :room)");
+        foreach ($classes as $c) {
+            $stmt->execute(['name' => $c[0], 'room' => $c[1]]);
+        }
+    }
+
+    // Seed default Subjects
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM subjects WHERE school_id = 1");
+    $stmt->execute();
+    if ($stmt->fetchColumn() == 0) {
+        $subjects = ['English', 'Hindi', 'Mathematics', 'Science', 'Computer', 'EVS', 'Drawing', 'GK', 'Sports'];
+        $stmt = $pdo->prepare("INSERT INTO subjects (school_id, name) VALUES (1, :name)");
+        foreach ($subjects as $s) {
+            $stmt->execute(['name' => $s]);
+        }
+    }
+
+    // Seed default Teachers
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM teachers WHERE school_id = 1");
+    $stmt->execute();
+    if ($stmt->fetchColumn() == 0) {
+        $teachers = [
+            ['Bilal Ahmed', 'Male', 'Mathematics', 'M.Sc. B.Ed.', '5 Years', '982736451092', '1200.00', 'Active', 'Class 11, Class 12'],
+            ['Neha Noor', 'Female', 'English', 'M.A. B.Ed.', '3 Years', '876523091276', '1000.00', 'Active', 'Class 9, Class 10'],
+            ['Sam Brown', 'Male', 'Science', 'M.Sc. Ph.D.', '8 Years', '654312098765', '1500.00', 'Active', 'Class 8, Class 7']
+        ];
+        $stmt = $pdo->prepare("INSERT INTO teachers (school_id, name, gender, subject, qualification, experience, aadhaar_number, pan_number, joining_date, salary_amount, status, assigned_classes) VALUES (1, :name, :gender, :subject, :qualification, :experience, :aadhaar, 'ABCDE1234F', '2024-04-01', :salary, :status, :assigned)");
+        foreach ($teachers as $t) {
+            $stmt->execute([
+                'name' => $t[0],
+                'gender' => $t[1],
+                'subject' => $t[2],
+                'qualification' => $t[3],
+                'experience' => $t[4],
+                'aadhaar' => $t[5],
+                'salary' => $t[6],
+                'status' => $t[7],
+                'assigned' => $t[8]
+            ]);
+        }
+    }
+
+    // Seed default Students
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM students WHERE school_id = 1");
+    $stmt->execute();
+    if ($stmt->fetchColumn() == 0) {
+        // Find academic year id for 2026-2027
+        $ayStmt = $pdo->prepare("SELECT id FROM academic_years WHERE school_id = 1 AND year_range = '2026-2027' LIMIT 1");
+        $ayStmt->execute();
+        $ayId = $ayStmt->fetchColumn() ?: 2;
+
+        // Find classroom ids for Class 11 and Class 12
+        $c11Stmt = $pdo->prepare("SELECT id FROM classrooms WHERE school_id = 1 AND name = 'Class 11' LIMIT 1");
+        $c11Stmt->execute();
+        $c11Id = $c11Stmt->fetchColumn() ?: 11;
+
+        $c12Stmt = $pdo->prepare("SELECT id FROM classrooms WHERE school_id = 1 AND name = 'Class 12' LIMIT 1");
+        $c12Stmt->execute();
+        $c12Id = $c12Stmt->fetchColumn() ?: 12;
+
+        $students = [
+            ['Jane Doe', '101', '1', $c11Id, 'Robert Doe', 'Mary Doe', '9828765432', '398006172685', 'abc', '2010-05-15', '2026-04-01'],
+            ['John Smith', '102', '2', $c11Id, 'David Smith', 'Sarah Smith', '9876543210', '123456789012', 'xyz', '2010-08-20', '2026-04-01'],
+            ['Alice Johnson', '101', '3', $c12Id, 'Mark Johnson', 'Emily Johnson', '9888888888', '987654321098', 'pqr', '2009-02-10', '2026-04-01']
+        ];
+
+        $stmt = $pdo->prepare("INSERT INTO students (school_id, academic_year_id, class_id, name, roll_number, sr_no, status, father_name, mother_name, phone, aadhaar_number, address, date_of_birth, admission_date, nationality, blood_group, documents) VALUES (1, :ay_id, :class_id, :name, :roll, :sr_no, 'Active', :father, :mother, '8650302499', :aadhaar, :address, :dob, :adm_date, 'Indian', 'B+', '[]')");
+        foreach ($students as $s) {
+            $stmt->execute([
+                'ay_id' => $ayId,
+                'class_id' => $s[3],
+                'name' => $s[0],
+                'roll' => $s[1],
+                'sr_no' => $s[2],
+                'father' => $s[4],
+                'mother' => $s[5],
+                'aadhaar' => $s[7],
+                'address' => $s[8],
+                'dob' => $s[9],
+                'adm_date' => $s[10]
+            ]);
+        }
+    }
+
+    // Seed default Fee Records
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM fee_records WHERE school_id = 1");
+    $stmt->execute();
+    if ($stmt->fetchColumn() == 0) {
+        $studStmt = $pdo->prepare("SELECT id, academic_year_id FROM students WHERE school_id = 1");
+        $studStmt->execute();
+        $allStuds = $studStmt->fetchAll();
+
+        $months = ["April", "May", "June", "July", "August", "September", "October", "November", "December", "January", "February", "March"];
+        
+        $feeStmt = $pdo->prepare("INSERT INTO fee_records (school_id, student_id, academic_year_id, month, amount, status, due_date, payment_date) VALUES (1, :student_id, :ay_id, :month, 150.00, :status, :due_date, :payment_date)");
+        
+        foreach ($allStuds as $s) {
+            foreach ($months as $idx => $m) {
+                $isPaid = $idx < 3;
+                $status = $isPaid ? 'Paid' : 'Pending';
+                $yearStr = ($idx >= 9) ? '2027' : '2026';
+                
+                $mNum = ($idx + 4);
+                if ($mNum > 12) $mNum -= 12;
+                $mNumStr = str_pad($mNum, 2, '0', STR_PAD_LEFT);
+                
+                $dueDate = "$yearStr-$mNumStr-10";
+                $paymentDate = $isPaid ? "$yearStr-$mNumStr-05" : null;
+                
+                $feeStmt->execute([
+                    'student_id' => $s['id'],
+                    'ay_id' => $s['academic_year_id'],
+                    'month' => $m,
+                    'status' => $status,
+                    'due_date' => $dueDate,
+                    'payment_date' => $paymentDate
+                ]);
+            }
+        }
+    }
 }
 
 // Helpers
