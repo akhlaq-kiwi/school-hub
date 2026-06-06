@@ -1,0 +1,30 @@
+{
+    "name": "bn-school/erp-backend",
+    "description": "Multi-Tenant School Management ERP Backend",
+    "type": "project",
+    "require": {
+        "slim/slim": "^4.12",
+        "slim/psr7": "^1.6",
+        "firebase/php-jwt": "^6.10",
+        "phpmailer/phpmailer": "^7.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    },
+    "config": {
+        "process-timeout": 0,
+        "allow-plugins": {
+            "slim/installers": true
+        },
+        "audit": {
+            "ignore-security-advisories": true
+        },
+        "policy": {
+            "advisories": {
+                "block": false
+            }
+        }
+    }
+}

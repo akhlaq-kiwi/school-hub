@@ -1,0 +1,117 @@
+[
+    {
+        "email": "abc@yopmail.com",
+        "password": "Test@123",
+        "role": "School Admin",
+        "school_id": 3,
+        "setup_completed": 1
+    },
+    {
+        "email": "gg@yopmail.com",
+        "password": "7!_uTSuUl6",
+        "role": "School Admin",
+        "school_id": 4,
+        "setup_completed": 0
+    },
+    {
+        "email": "amu.akhlaq@gmail.com",
+        "password": "eoTp5M*T28",
+        "role": "School Admin",
+        "school_id": 5,
+        "setup_completed": 0
+    },
+    {
+        "email": "bilalnashi6@gmail.com",
+        "password": "SecurePass123!",
+        "role": "School Admin",
+        "school_id": 6,
+        "setup_completed": 0,
+        "school_name": "Test School"
+    },
+    {
+        "email": "inter@yopmail.com",
+        "password": "ResetPassword123!",
+        "role": "School Admin",
+        "school_id": 7,
+        "setup_completed": 0
+    },
+    {
+        "email": "BP@yopmail.com",
+        "password": "8t(Av0!663",
+        "role": "School Admin",
+        "school_id": 8,
+        "setup_completed": 1
+    },
+    {
+        "email": "kk@yopmail.com",
+        "password": "Test@123",
+        "role": "School Admin",
+        "school_id": 9,
+        "setup_completed": 1,
+        "school_name": "KK Inter College"
+    },
+    {
+        "email": "ak@yopmail.com",
+        "password": "Test@123",
+        "role": "School Admin",
+        "school_id": 10,
+        "setup_completed": 1,
+        "school_name": "AK Inter College"
+    },
+    {
+        "email": "Sakir1@yopmail.com",
+        "password": "3Q$WS5mKF%",
+        "role": "School Admin",
+        "school_id": 11,
+        "setup_completed": 1,
+        "school_name": "-"
+    },
+    {
+        "email": "nnn@yopmail.com",
+        "password": "$*rXl5qvC0",
+        "role": "School Admin",
+        "school_id": 12,
+        "setup_completed": 1,
+        "school_name": "-"
+    },
+    {
+        "email": "pp@yopmail.com",
+        "password": "5J*w(i4YTd",
+        "role": "School Admin",
+        "school_id": 13,
+        "setup_completed": 0,
+        "school_name": "-"
+    },
+    {
+        "email": "dhjd@yopmail.com",
+        "password": "&xy2TyBS+X",
+        "role": "School Admin",
+        "school_id": 3,
+        "setup_completed": 1,
+        "school_name": "-"
+    },
+    {
+        "email": "mpl@yopmail.com",
+        "password": "C5o1C%dq2(",
+        "role": "School Admin",
+        "school_id": 4,
+        "setup_completed": 1,
+        "school_name": "SPN Public school"
+    },
+    {
+        "email": "sam@yopmail.com",
+        "password": ")&DwY#x2B@",
+        "role": "School Admin",
+        "school_id": 5,
+        "setup_completed": 1,
+        "school_name": "Zumbi college"
+    },
+    {
+        "email": "akhlak@yopmail.com",
+        "password": "b&3kVh)ULn",
+        "role": "School Admin",
+        "school_id": 6,
+        "setup_completed": 1,
+        "school_name": "Asba children academy"
+    }
+]
