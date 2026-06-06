@@ -31,7 +31,7 @@ $app = AppFactory::create();
 // Global Configuration
 $db_host = '127.0.0.1';
 $db_user = 'root';
-$db_pass = '';
+$db_pass = 'admin123';
 $db_name = 'bn_school_erp';
 $jwt_secret = 'super_secret_erp_key_2026';
 
