@@ -209,6 +209,32 @@ export default function App() {
   const [showExperienceLetter, setShowExperienceLetter] = useState(false);
   const [studentDetailTab, setStudentDetailTab] = useState('fees'); // 'fees' or 'documents'
 
+  // Admin Profile States
+  const [adminProfile, setAdminProfile] = useState(null);
+  const [adminProfileForm, setAdminProfileForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    address: '',
+    city: '',
+    state: '',
+    country: '',
+    timezone: 'Asia/Kolkata',
+    profile_image: ''
+  });
+  const [profileErrors, setProfileErrors] = useState({});
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileSubTab, setProfileSubTab] = useState('details'); // 'details' | 'edit' | 'password'
+  
+  // Password Change States
+  const [passwordForm, setPasswordForm] = useState({
+    current_password: '',
+    new_password: '',
+    confirm_password: ''
+  });
+  const [passwordErrors, setPasswordErrors] = useState({});
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
+
   // Currency definitions mapping code to symbol and name
   const currencyMap = {
     'INR': { symbol: '₹', code: 'INR', label: '₹ INR (Indian Rupee)' },
@@ -3224,9 +3250,7 @@ export default function App() {
     } else if (!isValidPhone(sForm.emergency_contact)) {
       newErrors.emergency_contact = "Emergency Phone must contain exactly 10 digits.";
     }
-    if (!sForm.email) {
-      newErrors.email = "Email Address is required.";
-    } else if (!isValidEmail(sForm.email)) {
+    if (sForm.email && !isValidEmail(sForm.email)) {
       newErrors.email = "Please enter a valid email address.";
     }
     if (!sForm.aadhaar_number) {
@@ -4710,6 +4734,663 @@ export default function App() {
     );
   }
 
+  // --- ADMIN PROFILE ACTIONS ---
+
+  const fetchProfileData = async () => {
+    if (!token) return;
+    
+    const keySuffix = schoolId || 'default';
+    if (token.includes('mock') || !isConnected) {
+      const stored = localStorage.getItem(`bn_sandbox_profile_${keySuffix}`);
+      if (stored) {
+        const prof = JSON.parse(stored);
+        setAdminProfile(prof);
+        setAdminProfileForm(prof);
+        return;
+      } else {
+        const schoolNameVal = role === 'Super Admin' ? 'Platform Administration' : (schoolName || 'St. Xavier\'s International School');
+        const emailVal = role === 'Super Admin' ? 'Bilal@yopmail.com' : 'Admin@yopmail.com';
+        const nameVal = role === 'Super Admin' ? 'Bilal Ahmed' : 'School Admin';
+        const defaultProf = {
+          id: 0,
+          name: nameVal,
+          email: emailVal,
+          phone: '8650302499',
+          address: '123 Main Street',
+          city: 'Lucknow',
+          state: 'Uttar Pradesh',
+          country: 'India',
+          timezone: 'Asia/Kolkata',
+          profile_image: null,
+          role: role,
+          created_at: new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19),
+          last_login_at: new Date().toISOString().replace('T', ' ').substring(0, 19),
+          school_name: schoolNameVal,
+          school_email: role === 'Super Admin' ? 'support@bncollegeportal.com' : 'xavier.admin@xavier.edu',
+          school_phone: role === 'Super Admin' ? '9876543210' : '+1 (555) 019-8833',
+          school_address: role === 'Super Admin' ? '123 Main St' : '123 School Lane',
+          school_city: role === 'Super Admin' ? 'Lucknow' : 'Lucknow',
+          school_state: role === 'Super Admin' ? 'Uttar Pradesh' : 'Uttar Pradesh',
+          school_country: role === 'Super Admin' ? 'India' : 'India'
+        };
+        setAdminProfile(defaultProf);
+        setAdminProfileForm(defaultProf);
+        localStorage.setItem(`bn_sandbox_profile_${keySuffix}`, JSON.stringify(defaultProf));
+        return;
+      }
+    }
+    
+    try {
+      const res = await fetch('/api/profile', { headers: getHeaders() });
+      if (res.ok) {
+        const prof = await res.json();
+        setAdminProfile(prof);
+        setAdminProfileForm({
+          name: prof.name || '',
+          email: prof.email || '',
+          phone: prof.phone || '',
+          address: prof.address || '',
+          city: prof.city || '',
+          state: prof.state || '',
+          country: prof.country || '',
+          timezone: prof.timezone || 'Asia/Kolkata',
+          profile_image: prof.profile_image || ''
+        });
+      }
+    } catch (err) {
+      console.error("Failed to fetch profile", err);
+    }
+  };
+
+  useEffect(() => {
+    if (token && !isInitializing) {
+      fetchProfileData();
+    }
+  }, [token, isInitializing]);
+
+  const saveProfilePhoto = async (photoBase64) => {
+    const keySuffix = schoolId || 'default';
+    if (token.includes('mock') || !isConnected) {
+      const updated = {
+        ...adminProfile,
+        profile_image: photoBase64
+      };
+      setAdminProfile(updated);
+      localStorage.setItem(`bn_sandbox_profile_${keySuffix}`, JSON.stringify(updated));
+      showToast('Profile photo updated (Sandbox)', 'success');
+      return;
+    }
+    
+    try {
+      const formPayload = {
+        name: adminProfile?.name || 'Administrator',
+        email: adminProfile?.email || username,
+        phone: adminProfile?.phone || '',
+        address: adminProfile?.address || '',
+        city: adminProfile?.city || '',
+        state: adminProfile?.state || '',
+        country: adminProfile?.country || '',
+        timezone: adminProfile?.timezone || 'Asia/Kolkata',
+        profile_image: photoBase64
+      };
+      
+      const res = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify(formPayload)
+      });
+      if (res.ok) {
+        setAdminProfile(prev => ({ ...prev, profile_image: photoBase64 }));
+        showToast('Profile photo updated', 'success');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Error updating profile photo', 'error');
+    }
+  };
+
+  const handleProfilePhotoChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    if (file.size > 2 * 1024 * 1024) {
+      alert("File size exceeds 2MB limit.");
+      return;
+    }
+    
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setAdminProfileForm(prev => ({ ...prev, profile_image: reader.result }));
+      saveProfilePhoto(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveProfilePhoto = () => {
+    saveProfilePhoto(null);
+    setAdminProfileForm(prev => ({ ...prev, profile_image: null }));
+  };
+
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
+    
+    const errors = {};
+    if (!adminProfileForm.name) errors.name = "Full Name is required.";
+    if (!adminProfileForm.email) {
+      errors.email = "Email Address is required.";
+    } else if (!isValidEmail(adminProfileForm.email)) {
+      errors.email = "Please enter a valid email address.";
+    }
+    if (adminProfileForm.phone) {
+      if (!/^\d{10}$/.test(adminProfileForm.phone)) {
+        errors.phone = "Phone Number must contain exactly 10 digits.";
+      }
+    }
+    
+    if (Object.keys(errors).length > 0) {
+      setProfileErrors(errors);
+      return;
+    }
+    
+    setProfileErrors({});
+    setIsSavingProfile(true);
+    
+    const keySuffix = schoolId || 'default';
+    if (token.includes('mock') || !isConnected) {
+      const updated = {
+        ...adminProfile,
+        ...adminProfileForm
+      };
+      setAdminProfile(updated);
+      localStorage.setItem(`bn_sandbox_profile_${keySuffix}`, JSON.stringify(updated));
+      setIsSavingProfile(false);
+      showToast('Profile updated (Sandbox Mode)', 'success');
+      setProfileSubTab('details');
+      return;
+    }
+    
+    try {
+      const res = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify(adminProfileForm)
+      });
+      if (res.ok) {
+        const resProf = await fetch('/api/profile', { headers: getHeaders() });
+        if (resProf.ok) {
+          const prof = await resProf.json();
+          setAdminProfile(prof);
+          if (username === adminProfile.email) {
+            setUsername(prof.email);
+          }
+        }
+        showToast('Profile updated successfully', 'success');
+        setProfileSubTab('details');
+      } else {
+        const err = await res.json();
+        alert(err.detail || 'Failed to update profile.');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Error updating profile', 'error');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleChangePasswordSubmit = async (e) => {
+    e.preventDefault();
+    
+    const errors = {};
+    if (!passwordForm.current_password) errors.current_password = "Current Password is required.";
+    
+    const np = passwordForm.new_password;
+    if (!np) {
+      errors.new_password = "New Password is required.";
+    } else {
+      if (np.length < 8) {
+        errors.new_password = "Must be at least 8 characters long.";
+      } else if (!/[A-Z]/.test(np)) {
+        errors.new_password = "Must contain at least one uppercase letter.";
+      } else if (!/[a-z]/.test(np)) {
+        errors.new_password = "Must contain at least one lowercase letter.";
+      } else if (!/[0-9]/.test(np)) {
+        errors.new_password = "Must contain at least one number.";
+      } else if (!/[!@#$%^&*()_+={}\[\]|\\\\:;\"\'<>,.?\/~`\-]/.test(np)) {
+        errors.new_password = "Must contain at least one special character.";
+      }
+    }
+    
+    if (passwordForm.new_password !== passwordForm.confirm_password) {
+      errors.confirm_password = "Passwords do not match.";
+    }
+    
+    if (Object.keys(errors).length > 0) {
+      setPasswordErrors(errors);
+      return;
+    }
+    
+    setPasswordErrors({});
+    setIsSavingPassword(true);
+    
+    if (token.includes('mock') || !isConnected) {
+      setIsSavingPassword(false);
+      setPasswordForm({ current_password: '', new_password: '', confirm_password: '' });
+      showToast('Password updated (Sandbox Mode)', 'success');
+      setProfileSubTab('details');
+      return;
+    }
+    
+    try {
+      const res = await fetch('/api/profile/password', {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify(passwordForm)
+      });
+      if (res.ok) {
+        showToast('Password changed successfully!', 'success');
+        setPasswordForm({ current_password: '', new_password: '', confirm_password: '' });
+        setProfileSubTab('details');
+      } else {
+        const err = await res.json();
+        alert(err.detail || 'Failed to update password.');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Error changing password', 'error');
+    } finally {
+      setIsSavingPassword(false);
+    }
+  };
+
+  const renderAdminProfileTab = () => {
+    return (
+      <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <User size={22} className="gradient-text" /> Admin Profile Management
+          </h3>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2.5fr', gap: '24px', alignItems: 'flex-start' }}>
+          {/* Left Card: Avatar & Brief Info */}
+          <div className="erp-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', textAlign: 'center' }}>
+            <div style={{ position: 'relative', width: '120px', height: '120px' }}>
+              {adminProfileForm.profile_image ? (
+                <img 
+                  src={adminProfileForm.profile_image} 
+                  alt="Profile Avatar" 
+                  style={{ width: '120px', height: '120px', borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--color-primary)' }} 
+                />
+              ) : (
+                <div style={{ 
+                  width: '120px', 
+                  height: '120px', 
+                  borderRadius: '50%', 
+                  background: 'rgba(255,255,255,0.05)', 
+                  border: '3px solid var(--border-color)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  color: 'var(--text-muted)'
+                }}>
+                  <User size={64} />
+                </div>
+              )}
+            </div>
+            
+            {/* Photo Actions */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                <button 
+                  type="button" 
+                  className="btn-outline" 
+                  style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                  onClick={() => document.getElementById('admin-avatar-upload').click()}
+                >
+                  Upload Photo
+                </button>
+                <input 
+                  id="admin-avatar-upload" 
+                  type="file" 
+                  accept="image/png, image/jpeg, image/jpg" 
+                  style={{ display: 'none' }} 
+                  onChange={handleProfilePhotoChange} 
+                />
+                {adminProfileForm.profile_image && (
+                  <button 
+                    type="button" 
+                    className="btn-outline" 
+                    style={{ padding: '6px 12px', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
+                    onClick={handleRemoveProfilePhoto}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Max file size: 2MB (PNG/JPG)</span>
+            </div>
+
+            <div style={{ width: '100%', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+              <h4 style={{ fontSize: '1.1rem', margin: 0 }}>{adminProfile?.name || 'Administrator'}</h4>
+              <span className="badge badge-success" style={{ marginTop: '8px' }}>
+                {adminProfile?.role === 'Super Admin' ? 'Super Admin' : 'Administrator'}
+              </span>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                <Clock size={12} /> {adminProfile?.timezone || 'Asia/Kolkata'}
+              </p>
+            </div>
+          </div>
+
+          {/* Right Card: Tab views */}
+          <div className="erp-card" style={{ padding: '0', overflow: 'hidden' }}>
+            {/* Sub-tabs header */}
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.01)', padding: '0 16px' }}>
+              <button 
+                type="button"
+                className={`profile-tab ${profileSubTab === 'details' ? 'active' : ''}`}
+                onClick={() => setProfileSubTab('details')}
+              >
+                Profile Details
+              </button>
+              <button 
+                type="button"
+                className={`profile-tab ${profileSubTab === 'edit' ? 'active' : ''}`}
+                onClick={() => {
+                  setProfileSubTab('edit');
+                  setAdminProfileForm({
+                    name: adminProfile?.name || '',
+                    email: adminProfile?.email || '',
+                    phone: adminProfile?.phone || '',
+                    address: adminProfile?.address || '',
+                    city: adminProfile?.city || '',
+                    state: adminProfile?.state || '',
+                    country: adminProfile?.country || '',
+                    timezone: adminProfile?.timezone || 'Asia/Kolkata',
+                    profile_image: adminProfile?.profile_image || ''
+                  });
+                  setProfileErrors({});
+                }}
+              >
+                Edit Profile
+              </button>
+              <button 
+                type="button"
+                className={`profile-tab ${profileSubTab === 'password' ? 'active' : ''}`}
+                onClick={() => {
+                  setProfileSubTab('password');
+                  setPasswordForm({ current_password: '', new_password: '', confirm_password: '' });
+                  setPasswordErrors({});
+                }}
+              >
+                Change Password
+              </button>
+            </div>
+
+            {/* Sub-tab content body */}
+            <div style={{ padding: '24px' }}>
+              {profileSubTab === 'details' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  <h4 style={{ fontSize: '1.05rem', margin: 0, fontWeight: 700, borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>Personal Information</h4>
+                  <div className="profile-detail-grid">
+                    <div className="profile-detail-item">
+                      <span className="profile-detail-label">Full Name</span>
+                      <span className="profile-detail-value">{adminProfile?.name || 'N/A'}</span>
+                    </div>
+                    <div className="profile-detail-item">
+                      <span className="profile-detail-label">Email Address</span>
+                      <span className="profile-detail-value">{adminProfile?.email || 'N/A'}</span>
+                    </div>
+                    <div className="profile-detail-item">
+                      <span className="profile-detail-label">Phone Number</span>
+                      <span className="profile-detail-value">{adminProfile?.phone || 'N/A'}</span>
+                    </div>
+                    <div className="profile-detail-item">
+                      <span className="profile-detail-label">Designation</span>
+                      <span className="profile-detail-value">{adminProfile?.role === 'Super Admin' ? 'Super Admin' : 'Administrator'}</span>
+                    </div>
+                    <div className="profile-detail-item" style={{ gridColumn: 'span 2' }}>
+                      <span className="profile-detail-label">Address</span>
+                      <span className="profile-detail-value">
+                        {[adminProfile?.address, adminProfile?.city, adminProfile?.state, adminProfile?.country].filter(Boolean).join(', ') || 'N/A'}
+                      </span>
+                    </div>
+                    <div className="profile-detail-item">
+                      <span className="profile-detail-label">Time Zone</span>
+                      <span className="profile-detail-value">{adminProfile?.timezone || 'Asia/Kolkata'}</span>
+                    </div>
+                    <div className="profile-detail-item">
+                      <span className="profile-detail-label">Account Created</span>
+                      <span className="profile-detail-value">{adminProfile?.created_at || 'N/A'}</span>
+                    </div>
+                    <div className="profile-detail-item">
+                      <span className="profile-detail-label">Last Login Date</span>
+                      <span className="profile-detail-value">{adminProfile?.last_login_at || 'N/A'}</span>
+                    </div>
+                  </div>
+
+                  {adminProfile?.role === 'School Admin' && (
+                    <>
+                      <h4 style={{ fontSize: '1.05rem', margin: '16px 0 0 0', fontWeight: 700, borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>School Tenant Details</h4>
+                      <div className="profile-detail-grid">
+                        <div className="profile-detail-item">
+                          <span className="profile-detail-label">School Name</span>
+                          <span className="profile-detail-value">{adminProfile?.school_name || 'N/A'}</span>
+                        </div>
+                        <div className="profile-detail-item">
+                          <span className="profile-detail-label">School Email</span>
+                          <span className="profile-detail-value">{adminProfile?.school_email || 'N/A'}</span>
+                        </div>
+                        <div className="profile-detail-item">
+                          <span className="profile-detail-label">School Contact</span>
+                          <span className="profile-detail-value">{adminProfile?.school_phone || 'N/A'}</span>
+                        </div>
+                        <div className="profile-detail-item" style={{ gridColumn: 'span 2' }}>
+                          <span className="profile-detail-label">School Address</span>
+                          <span className="profile-detail-value">{adminProfile?.school_address || 'N/A'}</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {profileSubTab === 'edit' && (
+                <form onSubmit={handleUpdateProfile} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div>
+                      <label className="form-label">Full Name *</label>
+                      <input 
+                        type="text" 
+                        className="erp-input" 
+                        value={adminProfileForm.name} 
+                        onChange={(e) => setAdminProfileForm({ ...adminProfileForm, name: e.target.value })}
+                      />
+                      {profileErrors.name && <div style={{ color: '#ef4444', fontSize: '0.75rem', marginTop: '4px' }}>{profileErrors.name}</div>}
+                    </div>
+                    <div>
+                      <label className="form-label">Email Address *</label>
+                      <input 
+                        type="email" 
+                        className="erp-input" 
+                        value={adminProfileForm.email} 
+                        onChange={(e) => setAdminProfileForm({ ...adminProfileForm, email: e.target.value })}
+                      />
+                      {profileErrors.email && <div style={{ color: '#ef4444', fontSize: '0.75rem', marginTop: '4px' }}>{profileErrors.email}</div>}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div>
+                      <label className="form-label">Phone Number</label>
+                      <input 
+                        type="text" 
+                        className="erp-input" 
+                        placeholder="e.g. 9876543210" 
+                        value={adminProfileForm.phone || ''} 
+                        onChange={(e) => setAdminProfileForm({ ...adminProfileForm, phone: e.target.value })}
+                      />
+                      {profileErrors.phone && <div style={{ color: '#ef4444', fontSize: '0.75rem', marginTop: '4px' }}>{profileErrors.phone}</div>}
+                    </div>
+                    <div>
+                      <label className="form-label">Time Zone</label>
+                      <select 
+                        className="erp-input" 
+                        value={adminProfileForm.timezone} 
+                        onChange={(e) => setAdminProfileForm({ ...adminProfileForm, timezone: e.target.value })}
+                      >
+                        <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
+                        <option value="UTC">UTC (GMT)</option>
+                        <option value="America/New_York">America/New_York (EST/EDT)</option>
+                        <option value="Europe/London">Europe/London (BST/GMT)</option>
+                        <option value="Asia/Dubai">Asia/Dubai (GST)</option>
+                        <option value="Asia/Singapore">Asia/Singapore (SGT)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="form-label">Home Address</label>
+                    <textarea 
+                      className="erp-input" 
+                      rows={2} 
+                      style={{ resize: 'vertical' }}
+                      value={adminProfileForm.address || ''} 
+                      onChange={(e) => setAdminProfileForm({ ...adminProfileForm, address: e.target.value })}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label className="form-label">City</label>
+                      <input 
+                        type="text" 
+                        className="erp-input" 
+                        value={adminProfileForm.city || ''} 
+                        onChange={(e) => setAdminProfileForm({ ...adminProfileForm, city: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">State</label>
+                      <input 
+                        type="text" 
+                        className="erp-input" 
+                        value={adminProfileForm.state || ''} 
+                        onChange={(e) => setAdminProfileForm({ ...adminProfileForm, state: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">Country</label>
+                      <input 
+                        type="text" 
+                        className="erp-input" 
+                        value={adminProfileForm.country || ''} 
+                        onChange={(e) => setAdminProfileForm({ ...adminProfileForm, country: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '12px' }}>
+                    <button 
+                      type="button" 
+                      className="btn-outline" 
+                      onClick={() => setProfileSubTab('details')}
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      type="submit" 
+                      className="btn-primary" 
+                      disabled={isSavingProfile}
+                    >
+                      {isSavingProfile ? 'Saving...' : 'Save Profile Details'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {profileSubTab === 'password' && (
+                <form onSubmit={handleChangePasswordSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div>
+                    <label className="form-label">Current Password *</label>
+                    <input 
+                      type="password" 
+                      className="erp-input" 
+                      value={passwordForm.current_password} 
+                      onChange={(e) => setPasswordForm({ ...passwordForm, current_password: e.target.value })}
+                    />
+                    {passwordErrors.current_password && <div style={{ color: '#ef4444', fontSize: '0.75rem', marginTop: '4px' }}>{passwordErrors.current_password}</div>}
+                  </div>
+
+                  <div>
+                    <label className="form-label">New Password *</label>
+                    <input 
+                      type="password" 
+                      className="erp-input" 
+                      value={passwordForm.new_password} 
+                      onChange={(e) => setPasswordForm({ ...passwordForm, new_password: e.target.value })}
+                    />
+                    {passwordErrors.new_password && <div style={{ color: '#ef4444', fontSize: '0.75rem', marginTop: '4px' }}>{passwordErrors.new_password}</div>}
+                    
+                    {/* Visual Password Strength Checklist */}
+                    <div style={{ marginTop: '8px', padding: '10px', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)' }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Password complexity requirements:</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '0.75rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: passwordForm.new_password.length >= 8 ? '#10b981' : 'var(--text-muted)' }}>
+                          <Check size={10} /> Min. 8 characters
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: /[A-Z]/.test(passwordForm.new_password) ? '#10b981' : 'var(--text-muted)' }}>
+                          <Check size={10} /> 1 uppercase letter
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: /[a-z]/.test(passwordForm.new_password) ? '#10b981' : 'var(--text-muted)' }}>
+                          <Check size={10} /> 1 lowercase letter
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: /[0-9]/.test(passwordForm.new_password) ? '#10b981' : 'var(--text-muted)' }}>
+                          <Check size={10} /> 1 number digit
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: /[!@#$%^&*()_+={}\[\]|\\\\:;\"\'<>,.?\/~`\-]/.test(passwordForm.new_password) ? '#10b981' : 'var(--text-muted)' }}>
+                          <Check size={10} /> 1 special character
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="form-label">Confirm New Password *</label>
+                    <input 
+                      type="password" 
+                      className="erp-input" 
+                      value={passwordForm.confirm_password} 
+                      onChange={(e) => setPasswordForm({ ...passwordForm, confirm_password: e.target.value })}
+                    />
+                    {passwordErrors.confirm_password && <div style={{ color: '#ef4444', fontSize: '0.75rem', marginTop: '4px' }}>{passwordErrors.confirm_password}</div>}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '12px' }}>
+                    <button 
+                      type="button" 
+                      className="btn-outline" 
+                      onClick={() => setProfileSubTab('details')}
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      type="submit" 
+                      className="btn-primary" 
+                      disabled={isSavingPassword}
+                    >
+                      {isSavingPassword ? 'Updating...' : 'Update Password'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // 4. Super Admin Portal Views
   if (role === 'Super Admin') {
     return (
@@ -4765,10 +5446,37 @@ export default function App() {
             </button>
           </div>
 
-          <div className="glass-panel" style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', background: 'rgba(2, 6, 23, 0.4)', marginTop: 'auto' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', color: isConnected ? '#10b981' : '#f59e0b', fontWeight: 600 }}>
-              <Server size={12} />
-              <span>{isConnected ? "MySQL DB Online" : "Sandbox Cache"}</span>
+          <div 
+            onClick={() => { setActiveTab('profile'); setSelectedClassId(null); setSelectedTeacher(null); setSelectedStudent(null); }} 
+            className={`sidebar-profile ${activeTab === 'profile' ? 'active' : ''}`}
+          >
+            {adminProfile?.profile_image ? (
+              <img 
+                src={adminProfile.profile_image} 
+                alt="Admin Avatar" 
+                style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--border-color)' }} 
+              />
+            ) : (
+              <div style={{ 
+                width: '36px', 
+                height: '36px', 
+                borderRadius: '50%', 
+                background: 'rgba(255, 255, 255, 0.1)', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                color: 'var(--text-secondary)'
+              }}>
+                <User size={18} />
+              </div>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                {adminProfile?.name || 'Bilal Ahmed'}
+              </span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                Super Admin
+              </span>
             </div>
           </div>
         </aside>
@@ -5098,6 +5806,9 @@ export default function App() {
           </div>
         )}
 
+        {/* TAB 3: Admin Profile */}
+        {activeTab === 'profile' && renderAdminProfileTab()}
+
       </div>
     );
   }
@@ -5139,12 +5850,9 @@ export default function App() {
             <GraduationCap size={24} color="white" />
           </div>
           <div>
-            <h1 style={{ fontSize: '1.05rem', fontWeight: 800, letterSpacing: '-0.5px' }}>
-              BN <span className="gradient-text">College Portal</span>
+            <h1 style={{ fontSize: '1.05rem', fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--text-primary)' }}>
+              {schoolName || 'BN School'}
             </h1>
-            <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Powered by BN College Portal
-            </span>
           </div>
         </div>
 
@@ -5153,10 +5861,10 @@ export default function App() {
             <Activity size={18} /> Dashboard
           </button>
           <button id="nav-btn-faculty" onClick={() => { setActiveTab('faculty'); setSelectedClassId(null); setSelectedTeacher(null); setSelectedStudent(null); }} className={`sidebar-item ${activeTab === 'faculty' ? 'active' : ''}`}>
-            <Users size={18} /> Faculty
+            <Users size={18} /> Teachers
           </button>
           <button id="nav-btn-students" onClick={() => { setActiveTab('students'); setSelectedClassId(null); setSelectedTeacher(null); setSelectedStudent(null); }} className={`sidebar-item ${activeTab === 'students' ? 'active' : ''}`}>
-            <GraduationCap size={18} /> Students
+            <GraduationCap size={18} /> Classes
           </button>
           <button id="nav-btn-planner" onClick={() => { setActiveTab('planner'); setSelectedClassId(null); setSelectedTeacher(null); setSelectedStudent(null); }} className={`sidebar-item ${activeTab === 'planner' ? 'active' : ''}`}>
             <Calendar size={18} /> Academic Planner
@@ -5172,11 +5880,37 @@ export default function App() {
           </button>
         </div>
 
-        {/* Database indicator */}
-        <div className="glass-panel" style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', background: 'rgba(2, 6, 23, 0.4)', marginTop: 'auto' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', color: isConnected ? '#10b981' : '#f59e0b', fontWeight: 600 }}>
-            <Server size={12} />
-            <span>{isConnected ? "MySQL DB Online" : "Sandbox Cache"}</span>
+        <div 
+          onClick={() => { setActiveTab('profile'); setSelectedClassId(null); setSelectedTeacher(null); setSelectedStudent(null); }} 
+          className={`sidebar-profile ${activeTab === 'profile' ? 'active' : ''}`}
+        >
+          {adminProfile?.profile_image ? (
+            <img 
+              src={adminProfile.profile_image} 
+              alt="Admin Avatar" 
+              style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--border-color)' }} 
+            />
+          ) : (
+            <div style={{ 
+              width: '36px', 
+              height: '36px', 
+              borderRadius: '50%', 
+              background: 'rgba(255, 255, 255, 0.1)', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              color: 'var(--text-secondary)'
+            }}>
+              <User size={18} />
+            </div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+              {adminProfile?.name || 'School Admin'}
+            </span>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+              Administrator
+            </span>
           </div>
         </div>
       </aside>
@@ -7725,6 +8459,9 @@ export default function App() {
 
             </div>
           )}
+
+          {/* TAB 8: Admin Profile */}
+          {activeTab === 'profile' && renderAdminProfileTab()}
             </>
           )}
         </div>

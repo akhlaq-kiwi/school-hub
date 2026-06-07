@@ -423,6 +423,45 @@ function migrateDb($pdo) {
     if ($q->rowCount() == 0) {
         $pdo->exec("ALTER TABLE schools ADD COLUMN currency VARCHAR(10) DEFAULT 'USD'");
     }
+    
+    // Check and add missing columns to users table
+    $q = $pdo->query("SHOW COLUMNS FROM users LIKE 'name'");
+    if ($q->rowCount() == 0) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN name VARCHAR(255) DEFAULT 'Administrator'");
+    }
+    $q = $pdo->query("SHOW COLUMNS FROM users LIKE 'phone'");
+    if ($q->rowCount() == 0) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN phone VARCHAR(50) DEFAULT NULL");
+    }
+    $q = $pdo->query("SHOW COLUMNS FROM users LIKE 'address'");
+    if ($q->rowCount() == 0) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN address TEXT DEFAULT NULL");
+    }
+    $q = $pdo->query("SHOW COLUMNS FROM users LIKE 'city'");
+    if ($q->rowCount() == 0) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN city VARCHAR(100) DEFAULT NULL");
+    }
+    $q = $pdo->query("SHOW COLUMNS FROM users LIKE 'state'");
+    if ($q->rowCount() == 0) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN state VARCHAR(100) DEFAULT NULL");
+    }
+    $q = $pdo->query("SHOW COLUMNS FROM users LIKE 'country'");
+    if ($q->rowCount() == 0) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN country VARCHAR(100) DEFAULT NULL");
+    }
+    $q = $pdo->query("SHOW COLUMNS FROM users LIKE 'timezone'");
+    if ($q->rowCount() == 0) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN timezone VARCHAR(100) DEFAULT 'Asia/Kolkata'");
+    }
+    $q = $pdo->query("SHOW COLUMNS FROM users LIKE 'profile_image'");
+    if ($q->rowCount() == 0) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN profile_image LONGTEXT DEFAULT NULL");
+    }
+    $q = $pdo->query("SHOW COLUMNS FROM users LIKE 'last_login_at'");
+    if ($q->rowCount() == 0) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN last_login_at DATETIME DEFAULT NULL");
+    }
+
     // Check and create whatsapp_delivery_logs table
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS whatsapp_delivery_logs (
@@ -449,7 +488,7 @@ function seedDb($pdo) {
     $stmt->execute(['email' => 'Bilal@yopmail.com']);
     if ($stmt->fetchColumn() == 0) {
         $hashed = password_hash('Bilal@123', PASSWORD_BCRYPT);
-        $stmt = $pdo->prepare("INSERT INTO users (email, password, role, is_active) VALUES (:email, :password, 'Super Admin', 1)");
+        $stmt = $pdo->prepare("INSERT INTO users (email, password, role, is_active, name) VALUES (:email, :password, 'Super Admin', 1, 'Bilal Ahmed')");
         $stmt->execute([
             'email' => 'Bilal@yopmail.com',
             'password' => $hashed
@@ -458,6 +497,8 @@ function seedDb($pdo) {
         // Log Super Admin account generation
         $logStmt = $pdo->prepare("INSERT INTO audit_logs (operator, action, timestamp, details) VALUES ('System', 'Platform Init', NOW(), 'Seeded Super Admin Account Bilal@yopmail.com')");
         $logStmt->execute();
+    } else {
+        $pdo->exec("UPDATE users SET name = 'Bilal Ahmed' WHERE email = 'Bilal@yopmail.com' AND (name IS NULL OR name = 'Administrator')");
     }
 
     // Seed default School
@@ -473,11 +514,13 @@ function seedDb($pdo) {
     $stmt->execute(['email' => 'Admin@yopmail.com']);
     if ($stmt->fetchColumn() == 0) {
         $hashed = password_hash('Admin@123', PASSWORD_BCRYPT);
-        $stmt = $pdo->prepare("INSERT INTO users (school_id, email, password, role, is_active) VALUES (1, :email, :password, 'School Admin', 1)");
+        $stmt = $pdo->prepare("INSERT INTO users (school_id, email, password, role, is_active, name) VALUES (1, :email, :password, 'School Admin', 1, 'School Admin')");
         $stmt->execute([
             'email' => 'Admin@yopmail.com',
             'password' => $hashed
         ]);
+    } else {
+        $pdo->exec("UPDATE users SET name = 'School Admin' WHERE email = 'Admin@yopmail.com' AND (name IS NULL OR name = 'Administrator')");
     }
 
     // Seed default Academic Years
@@ -1341,6 +1384,9 @@ $app->post('/api/auth/login', function (Request $request, Response $response) {
         $school_name = $school['name'];
     }
     
+    $updateLoginStmt = $pdo->prepare("UPDATE users SET last_login_at = NOW() WHERE id = :id");
+    $updateLoginStmt->execute(['id' => $user['id']]);
+
     $token = generateJwt($user['id'], $user['email'], $user['role'], $school_id, $setup_completed);
     
     logAudit($pdo, $school_id, $user['email'], 'Login', 'User logged in successfully.');
@@ -2039,6 +2085,204 @@ $app->delete('/api/super-admin/schools/{id}', function (Request $request, Respon
     
     return jsonResponse($response, ['message' => 'School deleted successfully.']);
 });
+
+// --- ADMIN PROFILE ENDPOINTS ---
+
+$app->get('/api/profile', function (Request $request, Response $response) {
+    $auth = getAuthUser($request);
+    if (!$auth) return jsonResponse($response, ['detail' => 'Unauthorized'], 401);
+    
+    $userId = $auth['sub'];
+    
+    if ($userId === 0 || strpos($request->getHeaderLine('Authorization'), 'mock-') !== false) {
+        $role = $auth['role'];
+        $email = $auth['email'];
+        
+        $schoolName = 'BN School';
+        $schoolEmail = 'school.admin@domain.com';
+        $schoolPhone = '9876543210';
+        $schoolAddress = '123 School Lane';
+        $schoolCity = 'Lucknow';
+        $schoolState = 'Uttar Pradesh';
+        $schoolCountry = 'India';
+        
+        if ($role === 'Super Admin') {
+            $schoolName = 'Platform Administration';
+            $schoolEmail = 'support@bncollegeportal.com';
+        }
+        
+        $mockProfile = [
+            'id' => $userId,
+            'email' => $email,
+            'name' => $role === 'Super Admin' ? 'Bilal Ahmed' : 'School Admin',
+            'phone' => '8650302499',
+            'address' => '123 Main Street',
+            'city' => 'Lucknow',
+            'state' => 'Uttar Pradesh',
+            'country' => 'India',
+            'timezone' => 'Asia/Kolkata',
+            'profile_image' => null,
+            'role' => $role,
+            'created_at' => date('Y-m-d H:i:s', strtotime('-30 days')),
+            'last_login_at' => date('Y-m-d H:i:s'),
+            'school_name' => $schoolName,
+            'school_email' => $schoolEmail,
+            'school_phone' => $schoolPhone,
+            'school_address' => $schoolAddress,
+            'school_city' => $schoolCity,
+            'school_state' => $schoolState,
+            'school_country' => $schoolCountry
+        ];
+        return jsonResponse($response, $mockProfile);
+    }
+    
+    $pdo = getDb();
+    $stmt = $pdo->prepare("
+        SELECT u.id, u.email, u.name, u.phone, u.address, u.city, u.state, u.country, u.timezone, u.profile_image, u.role, u.created_at, u.last_login_at,
+               s.name AS school_name, s.email AS school_email, s.contact_number AS school_phone, s.address AS school_address
+        FROM users u
+        LEFT JOIN schools s ON u.school_id = s.id
+        WHERE u.id = :id
+    ");
+    $stmt->execute(['id' => $userId]);
+    $profile = $stmt->fetch();
+    
+    if (!$profile) {
+        return jsonResponse($response, ['detail' => 'User profile not found.'], 404);
+    }
+    
+    return jsonResponse($response, $profile);
+});
+
+$app->put('/api/profile', function (Request $request, Response $response) {
+    $auth = getAuthUser($request);
+    if (!$auth) return jsonResponse($response, ['detail' => 'Unauthorized'], 401);
+    
+    $userId = $auth['sub'];
+    $data = getJsonData($request);
+    
+    $name = trim($data['name'] ?? '');
+    $email = trim($data['email'] ?? '');
+    $phone = trim($data['phone'] ?? '');
+    $address = trim($data['address'] ?? '');
+    $city = trim($data['city'] ?? '');
+    $state = trim($data['state'] ?? '');
+    $country = trim($data['country'] ?? '');
+    $timezone = trim($data['timezone'] ?? 'Asia/Kolkata');
+    $profile_image = $data['profile_image'] ?? null;
+    
+    if (empty($name) || empty($email)) {
+        return jsonResponse($response, ['detail' => 'Name and Email are mandatory fields.'], 400);
+    }
+    
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return jsonResponse($response, ['detail' => 'Please enter a valid email address.'], 400);
+    }
+    
+    if (!empty($phone) && !preg_match('/^\d{10}$/', $phone)) {
+        return jsonResponse($response, ['detail' => 'Phone number must contain exactly 10 digits.'], 400);
+    }
+    
+    if ($userId === 0 || strpos($request->getHeaderLine('Authorization'), 'mock-') !== false) {
+        return jsonResponse($response, [
+            'success' => true, 
+            'profile' => [
+                'name' => $name, 'email' => $email, 'phone' => $phone, 'address' => $address,
+                'city' => $city, 'state' => $state, 'country' => $country, 'timezone' => $timezone, 'profile_image' => $profile_image
+            ]
+        ]);
+    }
+    
+    $pdo = getDb();
+    
+    $chk = $pdo->prepare("SELECT COUNT(*) FROM users WHERE email = :email AND id != :id");
+    $chk->execute(['email' => $email, 'id' => $userId]);
+    if ($chk->fetchColumn() > 0) {
+        return jsonResponse($response, ['detail' => 'This email address is already in use by another user.'], 400);
+    }
+    
+    $stmt = $pdo->prepare("
+        UPDATE users 
+        SET name = :name, email = :email, phone = :phone, address = :address, 
+            city = :city, state = :state, country = :country, timezone = :timezone, profile_image = :profile_image
+        WHERE id = :id
+    ");
+    $stmt->execute([
+        'name' => $name,
+        'email' => $email,
+        'phone' => empty($phone) ? null : $phone,
+        'address' => empty($address) ? null : $address,
+        'city' => empty($city) ? null : $city,
+        'state' => empty($state) ? null : $state,
+        'country' => empty($country) ? null : $country,
+        'timezone' => $timezone,
+        'profile_image' => $profile_image,
+        'id' => $userId
+    ]);
+    
+    logAudit($pdo, $auth['school_id'], $email, 'Update Profile', "Updated profile details for admin user.");
+    
+    return jsonResponse($response, ['success' => true, 'message' => 'Profile updated successfully.']);
+});
+
+$app->put('/api/profile/password', function (Request $request, Response $response) {
+    $auth = getAuthUser($request);
+    if (!$auth) return jsonResponse($response, ['detail' => 'Unauthorized'], 401);
+    
+    $userId = $auth['sub'];
+    $data = getJsonData($request);
+    
+    $currentPassword = $data['current_password'] ?? '';
+    $newPassword = $data['new_password'] ?? '';
+    $confirmPassword = $data['confirm_password'] ?? '';
+    
+    if (empty($currentPassword) || empty($newPassword) || empty($confirmPassword)) {
+        return jsonResponse($response, ['detail' => 'All password fields are required.'], 400);
+    }
+    
+    if ($newPassword !== $confirmPassword) {
+        return jsonResponse($response, ['detail' => 'New password and confirmation password do not match.'], 400);
+    }
+    
+    if (strlen($newPassword) < 8) {
+        return jsonResponse($response, ['detail' => 'New password must be at least 8 characters long.'], 400);
+    }
+    if (!preg_match('/[A-Z]/', $newPassword)) {
+        return jsonResponse($response, ['detail' => 'New password must contain at least one uppercase letter.'], 400);
+    }
+    if (!preg_match('/[a-z]/', $newPassword)) {
+        return jsonResponse($response, ['detail' => 'New password must contain at least one lowercase letter.'], 400);
+    }
+    if (!preg_match('/[0-9]/', $newPassword)) {
+        return jsonResponse($response, ['detail' => 'New password must contain at least one number.'], 400);
+    }
+    if (!preg_match('/[!@#$%^&*()_+={}\[\]|\\\\:;\"\'<>,.?\/~`\-]/', $newPassword)) {
+        return jsonResponse($response, ['detail' => 'New password must contain at least one special character.'], 400);
+    }
+    
+    if ($userId === 0 || strpos($request->getHeaderLine('Authorization'), 'mock-') !== false) {
+        return jsonResponse($response, ['success' => true, 'message' => 'Password updated successfully.']);
+    }
+    
+    $pdo = getDb();
+    
+    $stmt = $pdo->prepare("SELECT password FROM users WHERE id = :id LIMIT 1");
+    $stmt->execute(['id' => $userId]);
+    $userPassword = $stmt->fetchColumn();
+    
+    if (!$userPassword || !password_verify($currentPassword, $userPassword)) {
+        return jsonResponse($response, ['detail' => 'Current password entered is incorrect.'], 400);
+    }
+    
+    $hashed = password_hash($newPassword, PASSWORD_BCRYPT);
+    $upd = $pdo->prepare("UPDATE users SET password = :password WHERE id = :id");
+    $upd->execute(['password' => $hashed, 'id' => $userId]);
+    
+    logAudit($pdo, $auth['school_id'], $auth['email'], 'Change Password', "Admin updated account password securely.");
+    
+    return jsonResponse($response, ['success' => true, 'message' => 'Password updated successfully.']);
+});
+
 // School Configuration
 $app->get('/api/school', function (Request $request, Response $response) {
     $auth = getAuthUser($request);
